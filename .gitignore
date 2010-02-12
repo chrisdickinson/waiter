@@ -1,0 +1,8 @@
+.Python
+*.swp
+*.pyc
+lib/*
+include/*
+src/*
+var/*.db
+bin/*
