@@ -1,4 +1,4 @@
-from waiter import Waiter, Chef, Consumer, JSONConsumer
+from waiter import Waiter, Chef, Consumer, JSONConsumer, Menu
 import simplejson
 import mox
 import unittest
@@ -71,6 +71,70 @@ class TestOfJSONConsumer(unittest.TestCase):
         random_value_in_json = simplejson.dumps(random_value)
         self.assertEqual(c.handle(random.randint(1,100), random_value_in_json), random_value)
 
+class TestOfMenu(unittest.TestCase):
+    def setUp(self):
+        self.mox = mox.Mox()
+
+    def tearDown(self):
+        self.mox.UnsetStubs()
+
+    def test_instantiate_stores_value(self):
+        random_value = random.randint(1,100)
+        oh = Menu(random_value)
+        self.assertEqual(random_value, oh.value) 
+
+    def test_instantiate_updates_dict(self):
+        random_value = random.randint(1,100)
+        update_dict_key = [str, dict][random.randint(0,1)]
+        update_dict = { update_dict_key: random_value }
+
+        oh = Menu(random_value, update_dict)
+        self.assertEqual(random_value, oh.value) 
+        self.assertEqual(oh.dispatch[update_dict_key], random_value)
+
+    def test_accept_waiter_delegates_to_dispatch(self):
+        random_value = random.randint(1,100)
+        update_dict_key = [str, dict][random.randint(0,1)]
+        fake_function = lambda x: random_value
+        update_dict = { update_dict_key: fake_function }
+        oh = Menu(update_dict_key(), update_dict)
+        result = oh.accept_waiter(Waiter())
+        self.assertEqual(result, random_value)
+
+    def test_accept_str_sets_stack_if_no_stack(self):
+        waiter = Waiter()
+        random_string = 'rand-%d'%random.randint(1,100)
+        oh = Menu(random_string)
+        results = oh.accept_str(waiter)
+        self.assertTrue(results is waiter)
+        self.assertEqual(waiter._stack, [random_string])
+
+    def test_accept_str_prepends_divider_on_existing_stack(self):
+        waiter = Waiter()
+        random_string = 'rand-%d'%random.randint(1,100)
+        waiter._stack = [random_string]
+        oh = Menu(random_string)
+        results = oh.accept_str(waiter)
+        self.assertTrue(results is waiter)
+        self.assertEqual(waiter._stack, [random_string, '/', random_string])
+
+    def test_accept_dict_calls_waiter(self):
+        waiter = self.mox.CreateMock(Waiter)
+        random_value = { str('rand-%d'%random.randint(1,100)): random.randint(1,100) }
+        random_return = random.randint(1,100)
+        waiter(**random_value).AndReturn(random_return)
+        self.mox.ReplayAll()
+        oh = Menu(random_value)
+        results = oh.accept_waiter(waiter)
+        self.assertEqual(results, random_return)
+        self.mox.VerifyAll()
+
+    def test_accept_waiter_raises_typeerror_on_no_dispatch(self):
+        random_type = type('Random_%d'%random.randint(1,100), (), {})
+        oh = Menu(random_type())
+        random_anything = random.randint(1,100) 
+        self.assertRaises(TypeError, oh.accept_waiter, random_anything)
+
 class TestOfWaiter(unittest.TestCase):
     def setUp(self):
         self.mox = mox.Mox()
@@ -91,6 +155,13 @@ class TestOfWaiter(unittest.TestCase):
         self.assertEqual(waiter._stack, [])
         self.assertEqual(waiter._payload, {})
 
+    def test_div_delegates_to_objects_with_accept_waiter(self):
+        random_value = random.randint(1,100)
+        random_class = type('Rand%d'%random.randint(1,100), (), {'accept_waiter':lambda x, y:random_value})
+        waiter = Waiter()
+        results = waiter/random_class()
+        self.assertEqual(results, random_value)
+
     def test_init_automatically_assigns_objects(self):
         random_method = ('GET', 'POST', 'PUT', 'DELETE')[random.randint(0, 3)]
         waiter = Waiter(method=random_method)
@@ -100,47 +171,6 @@ class TestOfWaiter(unittest.TestCase):
         self.assertEqual(waiter._stack, [])
         self.assertEqual(waiter._payload, {})
         self.assertEqual(waiter._chef.method, random_method)
-
-    def test_accept_str_appends_slash_and_item_if_stack_exists(self):
-        waiter = Waiter()
-        random_value = 'rand-%d'%random.randint(1,100)
-        waiter._stack = [random_value]
-        results = waiter.accept_str(random_value)
-        self.assertEqual(waiter._stack, [random_value, '/', random_value])
-        self.assertTrue(results is waiter)
-
-    def test_accept_str_sets_stack_to_value_if_no_stack_exists(self):
-        waiter = Waiter()
-        random_value = 'rand-%d'%random.randint(1,100)
-        results = waiter.accept_str(random_value)
-        self.assertEqual(waiter._stack, [random_value])
-        self.assertTrue(results is waiter)
-
-    def test_accept_dict_updates_payload(self):
-        random_return = random.randint(1,100)
-        class BusBoy(Waiter):
-            def __call__(self, *args, **kwargs):
-                return random_return
-
-        waiter = BusBoy()
-        random_accept = { 'rand-%d'%random.randint(1,100): random.randint(1,100) }
-        results = waiter.accept_dict(random_accept)
-        self.assertEqual(waiter._payload, random_accept)
-        self.assertEqual(results, random_return)
-        random_update = { 'update-%d'%random.randint(1,100): random.randint(1,100) }
-        waiter.accept_dict(random_update)
-        self.assertTrue(random_update.keys()[0] in waiter._payload.keys() and random_accept.keys()[0] in waiter._payload.keys())
-
-    def test_div_slot_delegates_to_lowercase_type(self):
-        random_type_name = 'RandomType%d'%random.randint(1,100)
-        random_type = type(random_type_name, (), {})
-        random_return_value = random.randint(1,100)
-        def accept_random_type_name(self, rhs):
-            return random_return_value
-
-        busboy = type('BusBoy', (Waiter,), {'accept_%s'%random_type_name.lower(): accept_random_type_name})()
-        results = busboy/random_type()
-        self.assertEqual(results, random_return_value)
 
     def test_div_slot_raises_on_unsupported_type(self):
         random_type_name = 'EvenMoreRandomType%d'%random.randint(1,100)

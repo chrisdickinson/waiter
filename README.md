@@ -39,6 +39,45 @@ The Chef is responsible for cooking the Waiter's "order" -- the stack of strings
 doesn't make sense. He can assign errors, and the Waiter will diligently raise an error to you, the customer, detailing just what
 went wrong, in the form of a `Waiter.Error` exception.
 
+When a Waiter is taking an order, he doesn't much care what he's writing down, really. It just needs to be a value. It's not
+up to him what he'll listen to! He just needs to look up what to do on his `Menu`. When you send a `Waiter` out into the world,
+he'll bring the trusty default menu with him -- it's what tells him how to accept `str` and `dict` orders. But if you want to
+get him to accept something else without a fuss, you'll want to provide him a different `menu_class` to work with:
+
+    class HttpMenu(Menu):
+        def take_a_http_thing(self, waiter):
+            waiter._http = self.value
+
+        def __init__(self, *args, **kwargs):
+            kwargs.update({
+                'dispatch_update':{
+                    httplib2.Http:self.take_a_http_thing
+                }
+            })
+            return super(HttpMenu, self).__init__(*args, **kwargs)
+
+    waiter = Waiter(menu_class=HttpMenu)
+    http = httplib2.Http()
+    
+    waiter/http
+    waiter._http is http        # -> True
+
+But wait! Again! What if you want something to _always_ be on the menu? What if there's some tasty treat you just *cannot do without*.
+What if... _you want more restaurant themed puns_?
+
+    # don't worry, I got you
+
+    class Arrabbiata(object):
+        """
+            arrabbiata is ALWAYS on the menu.
+        """
+        def accept_waiter(self, waiter):
+            return "delicious!"
+
+    waiter = Waiter()       # nothing up my sleeves!
+    tasty_pasta = Arrabbiata()
+    print waiter/tasty_pasta        # -> "delicious!"
+
 The default Chef is very permissive -- he'll cook just about anything! But the functionality is there to create Chefs who only
 follow predetermined recipes. Or even Chefs that insert their own ingredients -- a TwitterChef who always pushes in the url
 "https://twitter.com" when your waiter brings back your order.

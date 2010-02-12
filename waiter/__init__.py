@@ -40,30 +40,46 @@ class JSONConsumer(object):
     def handle(self, response, data):
         return simplejson.loads(data)    
 
+class Menu(object):
+    def __init__(self, value, dispatch_update={}):
+        self.value = value
+        self.dispatch = {
+            str:self.accept_str,
+            dict:self.accept_dict,
+        }
+        self.dispatch.update(dispatch_update)
+
+    def accept_str(self, waiter):
+        waiter._stack = waiter._stack + ['/', self.value] if waiter._stack else [self.value]
+        return waiter
+
+    def accept_dict(self, waiter): 
+        return waiter(**self.value)
+
+    def accept_waiter(self, waiter):
+        try:
+            return self.dispatch[self.value.__class__](waiter)
+        except KeyError:
+            raise TypeError 
+
 class Waiter(object):
     class Error(Exception):
         pass
 
-    def __init__(self, http=None, method='GET', chef=None, consumer=None):
+    def __init__(self, http=None, method='GET', chef=None, consumer=None, menu_class=Menu):
         self._chef = chef if chef else Chef(method)
         self._consumer = consumer if consumer else JSONConsumer() 
 
+        self._menu_class = menu_class
         self._http = http if http else httplib2.Http()
         self._stack = []
         self._payload = {}
 
-    def accept_str(self, rhs):
-        self._stack = self._stack + ['/', rhs] if self._stack else [rhs]
-        return self
-
-    def accept_dict(self, rhs):
-        self._payload.update(rhs)
-        return self()
-
     def __div__(self, rhs):
-        if hasattr(self, 'accept_%s' % rhs.__class__.__name__.lower()):
-            return getattr(self, 'accept_%s' % rhs.__class__.__name__.lower())(rhs)
-        raise TypeError 
+        handler = getattr(rhs, 'accept_waiter', self._menu_class(rhs).accept_waiter)
+        if hasattr(rhs, 'accept_waiter'):
+            handler = rhs.accept_waiter
+        return handler(self)
 
     def __call__(self, *args, **kwargs):
         self._payload.update(kwargs)
