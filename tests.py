@@ -1,4 +1,5 @@
 from waiter import Waiter, Chef, Consumer, JSONConsumer, Menu
+from waiter.methods import POST, PUT, DELETE, GET, Method
 import simplejson
 import mox
 import unittest
@@ -219,3 +220,18 @@ class TestOfWaiter(unittest.TestCase):
         self.mox.ReplayAll()
         self.assertRaises(Waiter.Error, waiter.__call__)
         self.mox.VerifyAll()
+
+class TestOfMethods(unittest.TestCase):
+    def test_method_sets_chef_method(self):
+        random_value = random.randint(0,100)
+        random_method = Method(random_value)
+        waiter = Waiter()
+        waiter/random_method
+        self.assertEqual(waiter._chef.method, random_value)
+
+    def test_default_methods_work_as_expected(self):
+        default_methods = (POST, PUT, DELETE, GET)
+        waiter = Waiter()
+        for method in default_methods:
+            waiter/method
+            self.assertEqual(waiter._chef.method, method.method)
